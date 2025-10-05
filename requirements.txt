@@ -1,0 +1,13 @@
+rioxarray
+xarray
+numpy
+pandas
+geopandas
+shapely
+tqdm
+zarr
+requests
+earthaccess
+dask
+matplotlib
+Pillow
