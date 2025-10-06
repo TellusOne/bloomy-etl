@@ -1,6 +1,4 @@
-"""
-Processamento de granules individuais
-"""
+
 import asyncio
 import numpy as np
 import xarray as xr
@@ -104,7 +102,6 @@ class GranuleProcessor:
         
         granule_links = earthaccess.results.DataGranule(granule, None).data_links()
         
-        # Filtrar bandas necessárias
         required_bands = ["B02", "B04", "B08", "Fmask"]
         band_links = [
             link for link in granule_links 
@@ -113,14 +110,13 @@ class GranuleProcessor:
         
         if len(band_links) < len(required_bands):
             self.logger.warning(
-                f"⚠️  Granule {granule_idx+1} sem todas as bandas "
+                f" Granule {granule_idx+1} without all the bands "
                 f"({len(band_links)}/{len(required_bands)})"
             )
             return None
         
-        self.logger.debug(f"   📥 Baixando {len(band_links)} bandas")
+        self.logger.debug(f"Download {len(band_links)} layers")
         
-        # 🔥 Usar earthaccess.download() em thread separada (é síncrono)
         loop = asyncio.get_event_loop()
         try:
             downloaded_files = await loop.run_in_executor(
@@ -130,10 +126,9 @@ class GranuleProcessor:
             )
             
             if not downloaded_files or len(downloaded_files) < len(required_bands):
-                self.logger.warning(f"⚠️  Download incompleto")
+                self.logger.warning(f"Incomplete download")
                 return None
             
-            # Organizar por banda
             band_files = {}
             for band in required_bands:
                 found = next(
@@ -144,13 +139,13 @@ class GranuleProcessor:
                     band_files[band] = found
             
             if len(band_files) != len(required_bands):
-                self.logger.warning(f"⚠️  Bandas incompletas após download")
+                self.logger.warning(f"Incomplete bands after download")
                 return None
             
             return band_files
         
         except Exception as e:
-            self.logger.error(f"❌ Erro ao baixar: {e}")
+            self.logger.error(f"Error on download: {e}")
             return None
     
     def _download_with_earthaccess(self, links: list) -> list:
@@ -164,7 +159,7 @@ class GranuleProcessor:
             return downloaded or []
         
         except Exception as e:
-            self.logger.error(f"❌ earthaccess.download() fault: {e}")
+            self.logger.error(f" earthaccess.download() fault: {e}")
             return []
     
     def _process_rasters(
@@ -277,7 +272,7 @@ class GranuleProcessor:
                 contamination_pct = (np.sum(haze_mask) + np.sum(anomaly_low | anomaly_high) + np.sum(invalid_ndvi)) / total_pixels * 100
                 
                 self.logger.debug(
-                    f"   Mask: {valid_pixels}/{total_pixels} validos "
+                    f"   Mask: {valid_pixels}/{total_pixels} validated "
                     f"({valid_pixels/total_pixels*100:.1f}%) | "
                     f"Contamination: {contamination_pct:.1f}%"
                 )
