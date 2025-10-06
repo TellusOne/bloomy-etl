@@ -18,14 +18,13 @@ import logging
 from config.settings import DEFAULT_QUALITY, DEFAULT_CONFIG
 
 class GranuleProcessor:
-    """Processa granules individuais"""
     
     def __init__(
         self, 
         aoi_polygon, 
         temp_dir: Path, 
         cache_dir: Path,
-        authenticator,  # 🔥 Adicionar authenticator
+        authenticator,  # 
         quality_thresholds=None,
         max_retries: int = 3
     ):
@@ -33,7 +32,7 @@ class GranuleProcessor:
         self.aoi_polygon = aoi_polygon
         self.temp_dir = temp_dir
         self.cache_dir = cache_dir
-        self.authenticator = authenticator  # 🔥 Guardar referência
+        self.authenticator = authenticator  
         self.quality = quality_thresholds or DEFAULT_QUALITY
         self.max_retries = max_retries
         self.config = DEFAULT_CONFIG
@@ -45,15 +44,12 @@ class GranuleProcessor:
         total_granules: int,
         pbar: Optional = None
     ) -> Optional[xr.Dataset]:
-        """Processa um granule (sem session)"""
         
         for attempt in range(self.max_retries):
             granule_date = None
             try:
-                # Extrair metadados
                 granule_date, tile_id = self._extract_metadata(granule)
                 
-                # Verificar cache
                 cache_file = self._get_cache_file(tile_id, granule_date)
                 if cache_file.exists():
                     return self._load_from_cache(cache_file, pbar)
@@ -64,7 +60,6 @@ class GranuleProcessor:
                         f"{tile_id} {granule_date.date()} às {granule_date.strftime('%H:%M:%S')}"
                     )
                 
-                # Baixar bandas usando earthaccess
                 band_files = await self._download_bands(
                     granule, 
                     granule_idx
@@ -75,7 +70,6 @@ class GranuleProcessor:
                         pbar.update(1)
                     return None
                 
-                # Processar rasters
                 ds = self._process_rasters(
                     band_files, 
                     granule_date, 
@@ -93,10 +87,10 @@ class GranuleProcessor:
             
             except Exception as e:
                 if attempt < self.max_retries - 1:
-                    self.logger.warning(f"⚠️  Tentativa {attempt + 2}/{self.max_retries}: {e}")
+                    self.logger.warning(f"Tried {attempt + 2}/{self.max_retries}: {e}")
                     await asyncio.sleep(2 ** attempt)
                 else:
-                    self.logger.error(f"❌ Granule {granule_idx+1} falhou: {e}")
+                    self.logger.error(f"Granule {granule_idx+1} fault: {e}")
                     if pbar:
                         pbar.update(1)
                     return None
@@ -160,12 +154,8 @@ class GranuleProcessor:
             return None
     
     def _download_with_earthaccess(self, links: list) -> list:
-        """Download síncrono com earthaccess (thread-safe)"""
         try:
-            # Renovar token se necessário
             self.authenticator.refresh_if_needed()
-            
-            # Download com sessão autenticada
             downloaded = earthaccess.download(
                 links,
                 str(self.temp_dir)
@@ -174,7 +164,7 @@ class GranuleProcessor:
             return downloaded or []
         
         except Exception as e:
-            self.logger.error(f"❌ earthaccess.download() falhou: {e}")
+            self.logger.error(f"❌ earthaccess.download() fault: {e}")
             return []
     
     def _process_rasters(
@@ -184,49 +174,94 @@ class GranuleProcessor:
         tile_id: str, 
         granule_idx: int
     ) -> Optional[xr.Dataset]:
-        """Processa rasters e calcula índices"""
         
         try:
+            from rasterio.warp import reproject, Resampling
+            from rasterio.transform import from_bounds
+            
             with rasterio.open(band_files["B04"]) as b4, \
-                rasterio.open(band_files["B08"]) as b8, \
-                rasterio.open(band_files["B02"]) as b2, \
-                rasterio.open(band_files["Fmask"]) as fm:
+                    rasterio.open(band_files["B08"]) as b8, \
+                    rasterio.open(band_files["B02"]) as b2, \
+                    rasterio.open(band_files["Fmask"]) as fm:
                 
-                # Transformar AOI
-                transformer = Transformer.from_crs(
-                    "EPSG:4326", 
-                    b4.crs.to_string(), 
-                    always_xy=True
+                source_crs = b4.crs.to_string()
+                
+                if not hasattr(self, '_grid_initialized'):
+                    west, south, east, north = self.aoi_polygon.bounds
+                    self.pixel_size = 0.00027  # ~30m em graus
+                    self.width = int(np.ceil((east - west) / self.pixel_size))
+                    self.height = int(np.ceil((north - south) / self.pixel_size))
+                    self.grid_east = west + (self.width * self.pixel_size)
+                    self.grid_north = south + (self.height * self.pixel_size)
+                    self.dst_transform = from_bounds(west, south, self.grid_east, self.grid_north, self.width, self.height)
+                    self.target_crs = "EPSG:4326"
+                    self._grid_initialized = True
+                    
+                    self.logger.info(f"Grid WGS84: {self.height}x{self.width} pixels")
+                    self.logger.info(f"Bounds: W={west:.6f} S={south:.6f} E={self.grid_east:.6f} N={self.grid_north:.6f}")
+                
+                self.logger.debug(f"   CRS: {source_crs} -> WGS84")
+                
+                red_wgs = np.full((self.height, self.width), np.nan, dtype=np.float32)
+                nir_wgs = np.full((self.height, self.width), np.nan, dtype=np.float32)
+                blue_wgs = np.full((self.height, self.width), np.nan, dtype=np.float32)
+                fmask_wgs = np.full((self.height, self.width), 255, dtype=np.uint8)
+                
+                reproject(
+                    source=rasterio.band(b4, 1),
+                    destination=red_wgs,
+                    src_transform=b4.transform,
+                    src_crs=b4.crs,
+                    dst_transform=self.dst_transform,
+                    dst_crs=self.target_crs,
+                    resampling=Resampling.bilinear,
+                    src_nodata=-9999,
+                    dst_nodata=np.nan
                 )
-                aoi_transformed = shapely_transform(transformer.transform, self.aoi_polygon)
                 
-                # Verificar interseção
-                raster_bounds = Polygon.from_bounds(*b4.bounds)
-                if not raster_bounds.intersects(aoi_transformed):
-                    self.logger.debug(f"⚠️  Granule {granule_idx+1} não intersecta AOI")
-                    return None
+                reproject(
+                    source=rasterio.band(b8, 1),
+                    destination=nir_wgs,
+                    src_transform=b8.transform,
+                    src_crs=b8.crs,
+                    dst_transform=self.dst_transform,
+                    dst_crs=self.target_crs,
+                    resampling=Resampling.bilinear,
+                    src_nodata=-9999,
+                    dst_nodata=np.nan
+                )
                 
-                aoi_geojson_transformed = mapping(aoi_transformed)
+                reproject(
+                    source=rasterio.band(b2, 1),
+                    destination=blue_wgs,
+                    src_transform=b2.transform,
+                    src_crs=b2.crs,
+                    dst_transform=self.dst_transform,
+                    dst_crs=self.target_crs,
+                    resampling=Resampling.bilinear,
+                    src_nodata=-9999,
+                    dst_nodata=np.nan
+                )
                 
-                # Ler região da AOI
-                red, out_transform = mask(b4, [aoi_geojson_transformed], crop=True, all_touched=False, filled=False)
-                nir, _ = mask(b8, [aoi_geojson_transformed], crop=True, all_touched=False, filled=False)
-                blue, _ = mask(b2, [aoi_geojson_transformed], crop=True, all_touched=False, filled=False)
-                fmask, _ = mask(fm, [aoi_geojson_transformed], crop=True, all_touched=False, filled=False)
+                reproject(
+                    source=rasterio.band(fm, 1),
+                    destination=fmask_wgs,
+                    src_transform=fm.transform,
+                    src_crs=fm.crs,
+                    dst_transform=self.dst_transform,
+                    dst_crs=self.target_crs,
+                    resampling=Resampling.nearest,
+                    src_nodata=255,
+                    dst_nodata=255
+                )
                 
-                # Processar bandas
-                red = red[0].astype("float32")
-                nir = nir[0].astype("float32")
-                blue = blue[0].astype("float32")
-                fmask = fmask[0].astype("uint8")
+                red = red_wgs
+                nir = nir_wgs
+                blue = blue_wgs
+                fmask = fmask_wgs
                 
-                # Pixels fora do polígono
-                outside_polygon = (red == -9999) | (nir == -9999) | (blue == -9999)
-                red[outside_polygon] = np.nan
-                nir[outside_polygon] = np.nan
-                blue[outside_polygon] = np.nan
+                outside_polygon = np.isnan(red) | np.isnan(nir) | np.isnan(blue)
                 
-                # Filtros de qualidade
                 cloud_shadow_mask = np.isin(fmask, [2, 4]) & ~outside_polygon
                 anomaly_low = ((red < self.quality.red_nir_low) | (nir < self.quality.red_nir_low)) & ~outside_polygon & ~np.isnan(red)
                 anomaly_high = ((red > self.quality.red_nir_high) | (nir > self.quality.red_nir_high)) & ~outside_polygon & ~np.isnan(red)
@@ -235,37 +270,32 @@ class GranuleProcessor:
                 ndvi_prelim = (nir - red) / (nir + red + 1e-6)
                 invalid_ndvi = ((ndvi_prelim > self.quality.ndvi_max) | (ndvi_prelim < self.quality.ndvi_min)) & ~outside_polygon
                 
-                # Máscara combinada
                 mask_arr = outside_polygon | cloud_shadow_mask | anomaly_low | anomaly_high | haze_mask | invalid_ndvi
                 
-                # Estatísticas
                 total_pixels = mask_arr.size
                 valid_pixels = total_pixels - np.sum(mask_arr)
                 contamination_pct = (np.sum(haze_mask) + np.sum(anomaly_low | anomaly_high) + np.sum(invalid_ndvi)) / total_pixels * 100
                 
                 self.logger.debug(
-                    f"   Máscara: {valid_pixels}/{total_pixels} válidos "
+                    f"   Mask: {valid_pixels}/{total_pixels} validos "
                     f"({valid_pixels/total_pixels*100:.1f}%) | "
-                    f"Contaminação: {contamination_pct:.1f}%"
+                    f"Contamination: {contamination_pct:.1f}%"
                 )
                 
-                # Rejeitar se muita contaminação
                 if contamination_pct > self.quality.contamination_reject:
                     self.logger.warning(
-                        f"⚠️  Granule {granule_idx+1} com {contamination_pct:.1f}% "
-                        f"contaminação - pulando"
+                        f"Granule {granule_idx+1} with {contamination_pct:.1f}% "
+                        f"Contamination"
                     )
                     return None
                 
-                # Rejeitar se poucos pixels válidos
                 if valid_pixels < total_pixels * (self.quality.valid_pixels_min / 100):
                     self.logger.warning(
-                        f"⚠️  Granule {granule_idx+1} com <{self.quality.valid_pixels_min}% "
-                        f"pixels válidos - pulando"
+                        f"Granule {granule_idx+1} with <{self.quality.valid_pixels_min}% "
+                        f"Invalid pixels"
                     )
                     return None
                 
-                # Calcular índices
                 ndvi = (nir - red) / (nir + red + 1e-6)
                 evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1)
                 
@@ -275,7 +305,7 @@ class GranuleProcessor:
                 ndvi = np.clip(ndvi, -1.0, 1.0)
                 evi = np.clip(evi, -3.0, 3.0)
                 
-                # Criar dataset
+                west, south, _, _ = self.aoi_polygon.bounds
                 time_np = np.datetime64(granule_date.replace(tzinfo=None))
                 ds = xr.Dataset(
                     {
@@ -284,10 +314,12 @@ class GranuleProcessor:
                     },
                     coords={"time": [time_np]},
                     attrs={
-                        "crs": b4.crs.to_string(),
-                        "transform": tuple(out_transform),
+                        "crs": self.target_crs,
+                        "transform": tuple(self.dst_transform)[:6],
+                        "bounds": (west, south, self.grid_east, self.grid_north),
                         "date": granule_date.date().isoformat(),
                         "tile_id": tile_id,
+                        "source_crs": source_crs,
                         "valid_pixels_pct": float(valid_pixels / total_pixels * 100),
                         "contamination_pct": float(contamination_pct)
                     }
@@ -296,12 +328,10 @@ class GranuleProcessor:
                 return ds
         
         except Exception as e:
-            self.logger.error(f"❌ Erro ao processar rasters do granule {granule_idx+1}: {e}")
+            self.logger.error(f"Error processing rasters: {e}")
             return None
     
-    # ... métodos auxiliares permanecem iguais ...
     def _extract_metadata(self, granule) -> tuple:
-        """Extrai data e tile ID do granule"""
         try:
             temporal_extent = granule['umm']['TemporalExtent']['RangeDateTime']['BeginningDateTime']
             granule_date = datetime.fromisoformat(temporal_extent.replace("Z", "+00:00"))
@@ -315,37 +345,33 @@ class GranuleProcessor:
         return granule_date, tile_id
     
     def _get_cache_file(self, tile_id: str, granule_date: datetime) -> Path:
-        """Retorna path do arquivo de cache"""
         cache_key = f"{tile_id}_{granule_date.strftime('%Y%j')}"
         return self.cache_dir / f"{cache_key}.nc"
     
     def _load_from_cache(self, cache_file: Path, pbar) -> Optional[xr.Dataset]:
-        """Carrega dataset do cache"""
-        self.logger.debug(f"   📦 Cache hit: {cache_file.name}")
+        self.logger.debug(f"Cache hit: {cache_file.name}")
         try:
             ds = xr.open_dataset(cache_file)
             if pbar:
                 pbar.update(1)
             return ds
         except Exception as e:
-            self.logger.warning(f"⚠️  Cache corrompido, reprocessando: {e}")
+            self.logger.warning(f"Cache wrong: {e}")
             cache_file.unlink()
             return None
     
     def _save_to_cache(self, ds: xr.Dataset, cache_file: Path):
-        """Salva dataset no cache"""
         try:
             encoding = {
                 var: {"zlib": True, "complevel": 5, "dtype": "float32"}
                 for var in ds.data_vars
             }
             ds.to_netcdf(cache_file, encoding=encoding)
-            self.logger.debug(f"   💾 Salvo no cache: {cache_file.name}")
+            self.logger.debug(f" Save at: {cache_file.name}")
         except Exception as e:
-            self.logger.warning(f"⚠️  Erro ao salvar cache: {e}")
+            self.logger.warning(f"Error when saved: {e}")
     
     def _cleanup_temp_files(self, band_files: dict):
-        """Remove arquivos temporários"""
         for file in band_files.values():
             try:
                 Path(file).unlink()

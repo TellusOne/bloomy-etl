@@ -1,13 +1,13 @@
 """
-Script de visualização e análise de datasets HLS (NDVI/EVI)
-Permite explorar dados NetCDF de forma interativa
+HLS Dataset Viewer (NDVI/EVI)
+Interactive visualization tool for NetCDF time series
 """
 
 import argparse
 import numpy as np
 import xarray as xr
 import matplotlib
-matplotlib.use('TkAgg')  # Force backend antes de importar pyplot
+matplotlib.use('TkAgg')  
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 from pathlib import Path
@@ -16,7 +16,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class DatasetViewer:
-    """Visualizador interativo de datasets NetCDF"""
+    """Interactive viewer for HLS datasets"""
     
     def __init__(self, netcdf_path: str):
         self.netcdf_path = Path(netcdf_path)
@@ -24,63 +24,63 @@ class DatasetViewer:
         self.current_time_idx = 0
         
     def load_dataset(self) -> bool:
-        """Carrega o dataset NetCDF"""
+        """Load NetCDF dataset"""
         try:
-            print(f"📂 Carregando dataset: {self.netcdf_path}")
+            print(f"Loading dataset: {self.netcdf_path}")
             self.ds = xr.open_dataset(self.netcdf_path)
             
             print("\n" + "="*60)
-            print("📊 INFORMAÇÕES DO DATASET")
+            print("DATASET INFORMATION")
             print("="*60)
-            print(f"📅 Timestamps: {len(self.ds.time)}")
-            print(f"📏 Dimensões espaciais: {self.ds.dims['y']} x {self.ds.dims['x']} pixels")
-            print(f"🗓️  Período: {self.ds.time.values[0]} até {self.ds.time.values[-1]}")
-            print(f"📈 Variáveis: {list(self.ds.data_vars)}")
+            print(f"Timestamps: {len(self.ds.time)}")
+            print(f"Spatial dimensions: {self.ds.dims['y']} x {self.ds.dims['x']} pixels")
+            print(f"Period: {self.ds.time.values[0]} to {self.ds.time.values[-1]}")
+            print(f"Variables: {list(self.ds.data_vars)}")
             
-            # Estatísticas
+            # Statistics
             print("\n" + "="*60)
-            print("📈 ESTATÍSTICAS GLOBAIS")
+            print("GLOBAL STATISTICS")
             print("="*60)
             
             for var in ['ndvi', 'evi']:
                 if var in self.ds:
                     data = self.ds[var].values
                     print(f"\n{var.upper()}:")
-                    print(f"  Min:    {np.nanmin(data):.4f}")
-                    print(f"  Max:    {np.nanmax(data):.4f}")
-                    print(f"  Média:  {np.nanmean(data):.4f}")
-                    print(f"  Mediana: {np.nanmedian(data):.4f}")
-                    print(f"  Std:    {np.nanstd(data):.4f}")
+                    print(f"  Min:     {np.nanmin(data):.4f}")
+                    print(f"  Max:     {np.nanmax(data):.4f}")
+                    print(f"  Mean:    {np.nanmean(data):.4f}")
+                    print(f"  Median:  {np.nanmedian(data):.4f}")
+                    print(f"  Std Dev: {np.nanstd(data):.4f}")
                     
-                    # Percentual de pixels válidos
+                    # Valid pixels percentage
                     valid_pixels = np.sum(~np.isnan(data))
                     total_pixels = data.size
                     valid_pct = (valid_pixels / total_pixels) * 100
-                    print(f"  Pixels válidos: {valid_pct:.1f}%")
+                    print(f"  Valid pixels: {valid_pct:.1f}%")
             
             print("="*60)
             
-            # DEBUG: Verificar se há dados
-            print(f"\n🔍 DEBUG: Shape NDVI = {self.ds.ndvi.shape}")
-            print(f"🔍 DEBUG: Shape EVI = {self.ds.evi.shape}")
-            print(f"🔍 DEBUG: Primeiro timestamp = {self.ds.time.values[0]}")
+            # DEBUG: Check data presence
+            print(f"\nDEBUG: NDVI shape = {self.ds.ndvi.shape}")
+            print(f"DEBUG: EVI shape = {self.ds.evi.shape}")
+            print(f"DEBUG: First timestamp = {self.ds.time.values[0]}")
             
-            # Verificar se há valores não-NaN
+            # Check for non-NaN values
             ndvi_sample = self.ds.ndvi.isel(time=0).values
             evi_sample = self.ds.evi.isel(time=0).values
-            print(f"🔍 DEBUG: NDVI tem {np.sum(~np.isnan(ndvi_sample))} pixels válidos")
-            print(f"🔍 DEBUG: EVI tem {np.sum(~np.isnan(evi_sample))} pixels válidos")
+            print(f"DEBUG: NDVI has {np.sum(~np.isnan(ndvi_sample))} valid pixels")
+            print(f"DEBUG: EVI has {np.sum(~np.isnan(evi_sample))} valid pixels")
             
             return True
             
         except Exception as e:
-            print(f"❌ Erro ao carregar dataset: {e}")
+            print(f"ERROR loading dataset: {e}")
             import traceback
             traceback.print_exc()
             return False
     
     def plot_single_timestamp(self, time_idx: int = 0, save: bool = False):
-        """Plota NDVI e EVI para um único timestamp"""
+        """Plot NDVI and EVI for a single timestamp"""
         
         try:
             if time_idx >= len(self.ds.time):
@@ -92,7 +92,7 @@ class DatasetViewer:
             ndvi = self.ds.ndvi.isel(time=time_idx).values
             evi = self.ds.evi.isel(time=time_idx).values
             
-            print(f"\n🔍 Plotando timestamp {time_idx}: {date_str}")
+            print(f"\nPlotting timestamp {time_idx}: {date_str}")
             print(f"   NDVI shape: {ndvi.shape}, range: [{np.nanmin(ndvi):.3f}, {np.nanmax(ndvi):.3f}]")
             print(f"   EVI shape: {evi.shape}, range: [{np.nanmin(evi):.3f}, {np.nanmax(evi):.3f}]")
             
@@ -105,12 +105,12 @@ class DatasetViewer:
             cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
             cbar1.set_label('NDVI', fontsize=12)
             
-            # Adicionar estatísticas no NDVI
+            # Add statistics to NDVI
             ndvi_valid = ndvi[~np.isnan(ndvi)]
             if len(ndvi_valid) > 0:
                 stats_text = f'Min: {np.min(ndvi_valid):.3f}\n'
                 stats_text += f'Max: {np.max(ndvi_valid):.3f}\n'
-                stats_text += f'Média: {np.mean(ndvi_valid):.3f}'
+                stats_text += f'Mean: {np.mean(ndvi_valid):.3f}'
                 ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes,
                         fontsize=10, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
@@ -122,12 +122,12 @@ class DatasetViewer:
             cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
             cbar2.set_label('EVI', fontsize=12)
             
-            # Adicionar estatísticas no EVI
+            # Add statistics to EVI
             evi_valid = evi[~np.isnan(evi)]
             if len(evi_valid) > 0:
                 stats_text = f'Min: {np.min(evi_valid):.3f}\n'
                 stats_text += f'Max: {np.max(evi_valid):.3f}\n'
-                stats_text += f'Média: {np.mean(evi_valid):.3f}'
+                stats_text += f'Mean: {np.mean(evi_valid):.3f}'
                 ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes,
                         fontsize=10, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
@@ -139,19 +139,19 @@ class DatasetViewer:
             if save:
                 output_path = self.netcdf_path.parent / f"frame_{time_idx:03d}_{date_str}.png"
                 plt.savefig(output_path, dpi=150, bbox_inches='tight')
-                print(f"💾 Salvo: {output_path}")
+                print(f"Saved: {output_path}")
                 plt.close()
             else:
-                print("🖼️  Mostrando janela... (feche para continuar)")
+                print("Showing window... (close to continue)")
                 plt.show()
                 
         except Exception as e:
-            print(f"❌ Erro ao plotar: {e}")
+            print(f"ERROR plotting: {e}")
             import traceback
             traceback.print_exc()
     
     def plot_time_series(self, y: int = None, x: int = None):
-        """Plota série temporal de NDVI/EVI para um pixel específico"""
+        """Plot NDVI/EVI time series for a specific pixel"""
         
         try:
             if y is None:
@@ -159,7 +159,7 @@ class DatasetViewer:
             if x is None:
                 x = self.ds.dims['x'] // 2
             
-            print(f"\n📊 Plotando série temporal do pixel ({y}, {x})")
+            print(f"\nPlotting time series for pixel ({y}, {x})")
             
             ndvi_ts = self.ds.ndvi.isel(y=y, x=x).values
             evi_ts = self.ds.evi.isel(y=y, x=x).values
@@ -171,7 +171,7 @@ class DatasetViewer:
             ax1.plot(times, ndvi_ts, 'o-', color='green', linewidth=2, markersize=6, label='NDVI')
             ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
             ax1.set_ylabel('NDVI', fontsize=12, fontweight='bold')
-            ax1.set_title(f'Série Temporal - Pixel ({y}, {x})', fontsize=14, fontweight='bold')
+            ax1.set_title(f'Time Series - Pixel ({y}, {x})', fontsize=14, fontweight='bold')
             ax1.grid(True, alpha=0.3)
             ax1.legend()
             
@@ -179,41 +179,41 @@ class DatasetViewer:
             ax2.plot(times, evi_ts, 'o-', color='darkgreen', linewidth=2, markersize=6, label='EVI')
             ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
             ax2.set_ylabel('EVI', fontsize=12, fontweight='bold')
-            ax2.set_xlabel('Data', fontsize=12, fontweight='bold')
+            ax2.set_xlabel('Date', fontsize=12, fontweight='bold')
             ax2.grid(True, alpha=0.3)
             ax2.legend()
             
             plt.tight_layout()
-            print("🖼️  Mostrando janela... (feche para continuar)")
+            print("Showing window... (close to continue)")
             plt.show()
             
         except Exception as e:
-            print(f"❌ Erro ao plotar série temporal: {e}")
+            print(f"ERROR plotting time series: {e}")
             import traceback
             traceback.print_exc()
     
     def plot_interactive(self):
-        """Visualizador interativo com slider para navegar entre timestamps"""
+        """Interactive viewer with slider to navigate between timestamps"""
         
         try:
-            print("\n🎮 Iniciando modo interativo...")
+            print("\nStarting interactive mode...")
             
             fig = plt.figure(figsize=(16, 7))
             
-            # Criar subplots
+            # Create subplots
             ax1 = plt.subplot(1, 2, 1)
             ax2 = plt.subplot(1, 2, 2)
             
-            # Ajustar espaço para o slider
+            # Adjust space for slider
             plt.subplots_adjust(bottom=0.15)
             
-            # Inicializar com primeiro timestamp
+            # Initialize with first timestamp
             ndvi = self.ds.ndvi.isel(time=0).values
             evi = self.ds.evi.isel(time=0).values
             timestamp = self.ds.time.values[0]
             date_str = np.datetime_as_string(timestamp, unit='D')
             
-            # Plots iniciais
+            # Initial plots
             im1 = ax1.imshow(ndvi, cmap='RdYlGn', vmin=-0.2, vmax=1.0, interpolation='nearest')
             ax1.set_title(f'NDVI - {date_str}', fontsize=14, fontweight='bold')
             ax1.axis('off')
@@ -226,7 +226,7 @@ class DatasetViewer:
             cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
             cbar2.set_label('EVI', fontsize=12)
             
-            # Criar slider
+            # Create slider
             ax_slider = plt.axes([0.15, 0.05, 0.7, 0.03])
             slider = Slider(
                 ax_slider, 
@@ -237,7 +237,7 @@ class DatasetViewer:
                 valstep=1
             )
             
-            # Função de atualização
+            # Update function
             def update(val):
                 time_idx = int(slider.val)
                 ndvi = self.ds.ndvi.isel(time=time_idx).values
@@ -255,60 +255,60 @@ class DatasetViewer:
             
             slider.on_changed(update)
             
-            plt.suptitle(f'Navegador de Timestamps (Total: {len(self.ds.time)})', 
+            plt.suptitle(f'Timestamp Navigator (Total: {len(self.ds.time)})', 
                          fontsize=16, fontweight='bold', y=0.98)
             
-            print("\n💡 Use o slider para navegar entre os timestamps!")
-            print("💡 Feche a janela para continuar...")
+            print("\nTIP: Use the slider to navigate between timestamps!")
+            print("TIP: Close the window to continue...")
             
             plt.show()
             
         except Exception as e:
-            print(f"❌ Erro no modo interativo: {e}")
+            print(f"ERROR in interactive mode: {e}")
             import traceback
             traceback.print_exc()
     
     def plot_temporal_average(self):
-        """Plota média temporal de NDVI e EVI"""
+        """Plot temporal average of NDVI and EVI"""
         
         try:
-            print("\n📊 Calculando média temporal...")
+            print("\nCalculating temporal average...")
             
             ndvi_mean = self.ds.ndvi.mean(dim='time').values
             evi_mean = self.ds.evi.mean(dim='time').values
             
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
             
-            # NDVI médio
+            # Average NDVI
             im1 = ax1.imshow(ndvi_mean, cmap='RdYlGn', vmin=-0.2, vmax=1.0, interpolation='nearest')
-            ax1.set_title('NDVI - Média Temporal', fontsize=14, fontweight='bold')
+            ax1.set_title('NDVI - Temporal Average', fontsize=14, fontweight='bold')
             ax1.axis('off')
             cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
-            cbar1.set_label('NDVI Médio', fontsize=12)
+            cbar1.set_label('Average NDVI', fontsize=12)
             
-            # EVI médio
+            # Average EVI
             im2 = ax2.imshow(evi_mean, cmap='RdYlGn', vmin=-0.2, vmax=2.0, interpolation='nearest')
-            ax2.set_title('EVI - Média Temporal', fontsize=14, fontweight='bold')
+            ax2.set_title('EVI - Temporal Average', fontsize=14, fontweight='bold')
             ax2.axis('off')
             cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
-            cbar2.set_label('EVI Médio', fontsize=12)
+            cbar2.set_label('Average EVI', fontsize=12)
             
-            plt.suptitle(f'Média de {len(self.ds.time)} timestamps', 
+            plt.suptitle(f'Average of {len(self.ds.time)} timestamps', 
                          fontsize=16, fontweight='bold', y=0.98)
             plt.tight_layout()
-            print("🖼️  Mostrando janela... (feche para continuar)")
+            print("Showing window... (close to continue)")
             plt.show()
             
         except Exception as e:
-            print(f"❌ Erro ao plotar média: {e}")
+            print(f"ERROR plotting average: {e}")
             import traceback
             traceback.print_exc()
     
     def plot_std_deviation(self):
-        """Plota desvio padrão temporal (variabilidade)"""
+        """Plot temporal standard deviation (variability)"""
         
         try:
-            print("\n📊 Calculando desvio padrão temporal...")
+            print("\nCalculating temporal standard deviation...")
             
             ndvi_std = self.ds.ndvi.std(dim='time').values
             evi_std = self.ds.evi.std(dim='time').values
@@ -317,45 +317,45 @@ class DatasetViewer:
             
             # NDVI std
             im1 = ax1.imshow(ndvi_std, cmap='YlOrRd', vmin=0, vmax=0.3, interpolation='nearest')
-            ax1.set_title('NDVI - Desvio Padrão Temporal', fontsize=14, fontweight='bold')
+            ax1.set_title('NDVI - Temporal Standard Deviation', fontsize=14, fontweight='bold')
             ax1.axis('off')
             cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
-            cbar1.set_label('Variabilidade', fontsize=12)
+            cbar1.set_label('Variability', fontsize=12)
             
             # EVI std
             im2 = ax2.imshow(evi_std, cmap='YlOrRd', vmin=0, vmax=0.5, interpolation='nearest')
-            ax2.set_title('EVI - Desvio Padrão Temporal', fontsize=14, fontweight='bold')
+            ax2.set_title('EVI - Temporal Standard Deviation', fontsize=14, fontweight='bold')
             ax2.axis('off')
             cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
-            cbar2.set_label('Variabilidade', fontsize=12)
+            cbar2.set_label('Variability', fontsize=12)
             
-            plt.suptitle('Variabilidade Temporal (maior = mais mudança)', 
+            plt.suptitle('Temporal Variability (higher = more change)', 
                          fontsize=16, fontweight='bold', y=0.98)
             plt.tight_layout()
-            print("🖼️  Mostrando janela... (feche para continuar)")
+            print("Showing window... (close to continue)")
             plt.show()
             
         except Exception as e:
-            print(f"❌ Erro ao plotar desvio padrão: {e}")
+            print(f"ERROR plotting standard deviation: {e}")
             import traceback
             traceback.print_exc()
     
     def export_all_frames(self):
-        """Exporta todos os timestamps como imagens"""
+        """Export all timestamps as images"""
         output_dir = self.netcdf_path.parent / "frames"
         output_dir.mkdir(exist_ok=True)
         
-        print(f"\n📸 Exportando {len(self.ds.time)} frames para {output_dir}...")
+        print(f"\nExporting {len(self.ds.time)} frames to {output_dir}...")
         
         for i in range(len(self.ds.time)):
             self.plot_single_timestamp(i, save=True)
             if (i + 1) % 5 == 0:
-                print(f"   Processados {i + 1}/{len(self.ds.time)} frames...")
+                print(f"   Processed {i + 1}/{len(self.ds.time)} frames...")
         
-        print(f"✅ Todos os frames exportados para {output_dir}")
+        print(f"All frames exported to {output_dir}")
     
     def create_gif(self, duration: int = 500):
-        """Cria GIF animado da série temporal"""
+        """Create animated GIF of time series"""
         try:
             from PIL import Image
             import io
@@ -363,7 +363,7 @@ class DatasetViewer:
             output_path = self.netcdf_path.parent / "animation.gif"
             frames = []
             
-            print(f"\n🎬 Criando GIF animado...")
+            print(f"\nCreating animated GIF...")
             
             for i in range(len(self.ds.time)):
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
@@ -384,7 +384,7 @@ class DatasetViewer:
                 
                 plt.tight_layout()
                 
-                # Converter para imagem
+                # Convert to image
                 buf = io.BytesIO()
                 plt.savefig(buf, format='png', dpi=100)
                 buf.seek(0)
@@ -393,9 +393,9 @@ class DatasetViewer:
                 plt.close()
                 
                 if (i + 1) % 5 == 0:
-                    print(f"   Processados {i + 1}/{len(self.ds.time)} frames...")
+                    print(f"   Processed {i + 1}/{len(self.ds.time)} frames...")
             
-            # Salvar GIF
+            # Save GIF
             frames[0].save(
                 output_path,
                 save_all=True,
@@ -404,25 +404,25 @@ class DatasetViewer:
                 loop=0
             )
             
-            print(f"✅ GIF criado: {output_path}")
+            print(f"GIF created: {output_path}")
             
         except ImportError:
-            print("❌ Pillow não instalado. Execute: pip install Pillow")
+            print("ERROR: Pillow not installed. Run: pip install Pillow")
         except Exception as e:
-            print(f"❌ Erro ao criar GIF: {e}")
+            print(f"ERROR creating GIF: {e}")
             import traceback
             traceback.print_exc()
 
 def main():
     parser = argparse.ArgumentParser(
-        description="🔍 Visualizador de datasets HLS (NDVI/EVI)",
+        description="HLS Dataset Viewer (NDVI/EVI) - Interactive visualization tool",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
     parser.add_argument(
         "netcdf",
         type=str,
-        help="Caminho para o arquivo NetCDF"
+        help="Path to NetCDF file"
     )
     
     parser.add_argument(
@@ -430,40 +430,37 @@ def main():
         type=str,
         choices=['interactive', 'single', 'timeseries', 'mean', 'std', 'export', 'gif'],
         default='interactive',
-        help="Modo de visualização (padrão: interactive)"
+        help="Visualization mode (default: interactive)"
     )
     
     parser.add_argument(
         "--time-idx",
         type=int,
         default=0,
-        help="Índice do timestamp para modo 'single' (padrão: 0)"
+        help="Timestamp index for 'single' mode (default: 0)"
     )
     
     parser.add_argument(
         "--pixel-y",
         type=int,
-        help="Coordenada Y do pixel para série temporal"
+        help="Y coordinate of pixel for time series"
     )
     
     parser.add_argument(
         "--pixel-x",
         type=int,
-        help="Coordenada X do pixel para série temporal"
+        help="X coordinate of pixel for time series"
     )
     
     args = parser.parse_args()
     
-    # Detectar backend disponível
-    print(f"🔧 Backend matplotlib: {matplotlib.get_backend()}")
+    print(f"Matplotlib backend: {matplotlib.get_backend()}")
     
-    # Criar visualizador
     viewer = DatasetViewer(args.netcdf)
     
     if not viewer.load_dataset():
         return 1
     
-    # Executar modo selecionado
     try:
         if args.mode == 'interactive':
             viewer.plot_interactive()
@@ -487,7 +484,7 @@ def main():
             viewer.create_gif()
             
     except Exception as e:
-        print(f"\n❌ Erro ao executar modo '{args.mode}': {e}")
+        print(f"\nERROR executing mode '{args.mode}': {e}")
         import traceback
         traceback.print_exc()
         return 1
