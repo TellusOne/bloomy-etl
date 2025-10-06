@@ -87,7 +87,7 @@ python main.py --output data/output.nc --only-export --downsample 2
 
 ## 🛠️ Usage Examples
 
-### **Forest Monitoring**
+### **Forest and Phenology Monitoring**
 ```bash
 python main.py \
   --aoi data/amazon_forest.geojson \
